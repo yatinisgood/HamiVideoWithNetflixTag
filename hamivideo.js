@@ -29,6 +29,89 @@ function getGenres(item) {
   return (item.genres || []).filter(g => !KNOWN_COUNTRIES.includes(g));
 }
 
+let modalPaletteRequest = 0;
+
+function clampColor(v) {
+  return Math.max(0, Math.min(255, Math.round(v)));
+}
+
+function rgbToCss(rgb) {
+  return `rgb(${rgb.map(clampColor).join(',')})`;
+}
+
+function shadeColor(rgb, factor) {
+  return rgb.map(v => v * factor);
+}
+
+function extractPosterPalette(src) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.onload = () => {
+      try {
+        const canvas = document.createElement('canvas');
+        const ctx = canvas.getContext('2d', { willReadFrequently: true });
+        canvas.width = 48;
+        canvas.height = 72;
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+
+        const data = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+        let r = 0, g = 0, b = 0, count = 0;
+
+        for (let i = 0; i < data.length; i += 16) {
+          const alpha = data[i + 3];
+          const red = data[i];
+          const green = data[i + 1];
+          const blue = data[i + 2];
+          const brightness = (red + green + blue) / 3;
+          if (alpha < 128 || brightness < 18 || brightness > 238) continue;
+          r += red;
+          g += green;
+          b += blue;
+          count++;
+        }
+
+        if (!count) {
+          reject(new Error('No usable poster pixels'));
+          return;
+        }
+
+        const base = [r / count, g / count, b / count];
+        resolve({
+          glow: rgbToCss(shadeColor(base, 1.35)),
+          base: rgbToCss(shadeColor(base, 0.55)),
+          dark: rgbToCss(shadeColor(base, 0.18)),
+        });
+      } catch (err) {
+        reject(err);
+      }
+    };
+    img.onerror = reject;
+    img.src = src;
+  });
+}
+
+function applyModalPosterPalette(src) {
+  const requestId = ++modalPaletteRequest;
+  const header = document.getElementById('modalHeader');
+  header.style.removeProperty('--modal-color-1');
+  header.style.removeProperty('--modal-color-2');
+  header.style.removeProperty('--modal-color-3');
+
+  if (!src) return;
+
+  extractPosterPalette(src)
+    .then(colors => {
+      if (requestId !== modalPaletteRequest) return;
+      header.style.setProperty('--modal-color-1', colors.glow);
+      header.style.setProperty('--modal-color-2', colors.base);
+      header.style.setProperty('--modal-color-3', colors.dark);
+    })
+    .catch(() => {
+      // Some image CDNs block canvas reads; the CSS fallback keeps the modal usable.
+    });
+}
+
 // ── Filters ────────────────────────────────────────────────────────────────
 function buildFilters() {
   const countryCounts = {};
@@ -182,7 +265,7 @@ function openModal(idx) {
     <button class="modal-close" id="modalCloseBtn">&#10005;</button>
     ${item.poster
       ? `<img class="modal-header-img" src="${item.poster}" alt="${item.title}" onerror="this.style.display='none'">`
-      : `<div style="width:100%;height:100%;background:linear-gradient(135deg,#1e1e2e,#2a1a2e);display:flex;align-items:center;justify-content:center;font-size:64px">&#127916;</div>`}
+      : `<div class="modal-header-placeholder">&#127916;</div>`}
     <div class="modal-header-gradient"></div>
     <div class="modal-header-title">${item.title}</div>
   `;
@@ -204,6 +287,7 @@ function openModal(idx) {
   `;
 
   document.getElementById('modalCloseBtn').addEventListener('click', closeModal);
+  applyModalPosterPalette(item.poster);
   document.getElementById('modalOverlay').classList.add('open');
   document.body.style.overflow = 'hidden';
 }
