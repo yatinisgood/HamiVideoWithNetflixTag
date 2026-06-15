@@ -142,10 +142,10 @@ function renderGrid() {
     </div>`;
   }).join('');
 
-  grid.addEventListener('click', e => {
+  grid.onclick = e => {
     const card = e.target.closest('.card');
     if (card) openModal(parseInt(card.dataset.idx));
-  }, { once: true });
+  };
 }
 
 // ── Hero ───────────────────────────────────────────────────────────────────
