@@ -123,58 +123,11 @@ function applyModalPosterBackground(src) {
   const bg = document.getElementById('modalHeaderBg');
   if (!bg) return;
 
-  bg.classList.remove('is-canvas-mosaic');
+  // Gaussian blur background: reuse the poster URL directly.
+  // The blur/opacity intensity is handled by CSS, so this works on static hosting
+  // without Canvas or CORS requirements. The clear poster on the right still uses
+  // the original image.
   bg.style.backgroundImage = src ? `url("${src}")` : '';
-
-  if (!src) return;
-
-  createMosaicDataUrl(src, 14)
-    .then(url => {
-      // If user opened another modal before the canvas returned, do not repaint it.
-      if (!document.getElementById('modalHeaderBg') || bg.dataset.src !== src) return;
-      bg.style.backgroundImage = `url("${url}")`;
-      bg.classList.add('is-canvas-mosaic');
-    })
-    .catch(() => {
-      // Fallback stays on CSS pixelated/blurred poster background. This works on
-      // static hosting too, while true canvas mosaic needs a CORS-safe image/proxy.
-    });
-}
-
-function createMosaicDataUrl(src, pixelSize = 14) {
-  return new Promise((resolve, reject) => {
-    const img = new Image();
-    img.onload = () => {
-      try {
-        const targetW = 720;
-        const targetH = 1080;
-        const smallW = Math.max(1, Math.floor(targetW / pixelSize));
-        const smallH = Math.max(1, Math.floor(targetH / pixelSize));
-
-        const smallCanvas = document.createElement('canvas');
-        const smallCtx = smallCanvas.getContext('2d');
-        smallCanvas.width = smallW;
-        smallCanvas.height = smallH;
-        smallCtx.drawImage(img, 0, 0, smallW, smallH);
-
-        const canvas = document.createElement('canvas');
-        const ctx = canvas.getContext('2d');
-        canvas.width = targetW;
-        canvas.height = targetH;
-        ctx.imageSmoothingEnabled = false;
-        ctx.drawImage(smallCanvas, 0, 0, smallW, smallH, 0, 0, targetW, targetH);
-
-        resolve(canvas.toDataURL('image/jpeg', 0.82));
-      } catch (err) {
-        reject(err);
-      }
-    };
-    img.onerror = reject;
-
-    // Same-origin proxy keeps canvas readable when available. Without the proxy,
-    // this may fail and the CSS fallback above will remain in use.
-    img.src = palettePosterSrc(src);
-  });
 }
 
 // ── Filters ────────────────────────────────────────────────────────────────
