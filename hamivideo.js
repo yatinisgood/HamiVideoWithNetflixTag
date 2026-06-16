@@ -43,10 +43,17 @@ function shadeColor(rgb, factor) {
   return rgb.map(v => v * factor);
 }
 
+// The HamiVideo CDN does not send CORS headers, so reading its pixels via
+// canvas would taint the canvas and throw. Route the palette image through the
+// same-origin local proxy (see server.py) so getImageData() is allowed. If the
+// proxy is not running, the load simply fails and the CSS fallback kicks in.
+function palettePosterSrc(src) {
+  return '/img?url=' + encodeURIComponent(src);
+}
+
 function extractPosterPalette(src) {
   return new Promise((resolve, reject) => {
     const img = new Image();
-    img.crossOrigin = 'anonymous';
     img.onload = () => {
       try {
         const canvas = document.createElement('canvas');
@@ -87,7 +94,7 @@ function extractPosterPalette(src) {
       }
     };
     img.onerror = reject;
-    img.src = src;
+    img.src = palettePosterSrc(src);
   });
 }
 
@@ -240,8 +247,10 @@ function renderHero() {
   const views   = parseInt(top.view_count || 0).toLocaleString();
 
   if (top.poster) {
-    document.getElementById('heroSection').style.background =
-      `linear-gradient(to right, rgba(0,0,0,0.9) 0%, rgba(0,0,0,0.3) 60%, transparent 100%), url(${top.poster}) right center / cover no-repeat`;
+    // Paint the poster onto .hero-bg — the topmost background layer. Setting it
+    // on #heroSection (as before) left it hidden behind .hero-bg's own gradient.
+    document.querySelector('.hero-bg').style.background =
+      `linear-gradient(to right, rgba(20,20,20,0.95) 0%, rgba(20,20,20,0.55) 45%, rgba(20,20,20,0.15) 100%), url("${top.poster}") right center / cover no-repeat`;
   }
 
   document.getElementById('heroContent').innerHTML = `
