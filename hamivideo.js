@@ -128,6 +128,10 @@ function applyModalPosterBackground(src) {
   // without Canvas or CORS requirements. The clear poster on the right still uses
   // the original image.
   bg.style.backgroundImage = src ? `url("${src}")` : '';
+  // Tune the background layer from JS: keep 50% opacity, add brightness.
+  // Increase/decrease brightness(1.25) as needed, e.g. 1.15 / 1.35.
+  bg.style.opacity = '0.5';
+  bg.style.filter = 'blur(30px) brightness(1.25) saturate(1.18) contrast(1.04)';
 }
 
 // ── Filters ────────────────────────────────────────────────────────────────
