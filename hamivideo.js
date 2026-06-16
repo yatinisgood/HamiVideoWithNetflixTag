@@ -119,6 +119,64 @@ function applyModalPosterPalette(src) {
     });
 }
 
+function applyModalPosterBackground(src) {
+  const bg = document.getElementById('modalHeaderBg');
+  if (!bg) return;
+
+  bg.classList.remove('is-canvas-mosaic');
+  bg.style.backgroundImage = src ? `url("${src}")` : '';
+
+  if (!src) return;
+
+  createMosaicDataUrl(src, 14)
+    .then(url => {
+      // If user opened another modal before the canvas returned, do not repaint it.
+      if (!document.getElementById('modalHeaderBg') || bg.dataset.src !== src) return;
+      bg.style.backgroundImage = `url("${url}")`;
+      bg.classList.add('is-canvas-mosaic');
+    })
+    .catch(() => {
+      // Fallback stays on CSS pixelated/blurred poster background. This works on
+      // static hosting too, while true canvas mosaic needs a CORS-safe image/proxy.
+    });
+}
+
+function createMosaicDataUrl(src, pixelSize = 14) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => {
+      try {
+        const targetW = 720;
+        const targetH = 1080;
+        const smallW = Math.max(1, Math.floor(targetW / pixelSize));
+        const smallH = Math.max(1, Math.floor(targetH / pixelSize));
+
+        const smallCanvas = document.createElement('canvas');
+        const smallCtx = smallCanvas.getContext('2d');
+        smallCanvas.width = smallW;
+        smallCanvas.height = smallH;
+        smallCtx.drawImage(img, 0, 0, smallW, smallH);
+
+        const canvas = document.createElement('canvas');
+        const ctx = canvas.getContext('2d');
+        canvas.width = targetW;
+        canvas.height = targetH;
+        ctx.imageSmoothingEnabled = false;
+        ctx.drawImage(smallCanvas, 0, 0, smallW, smallH, 0, 0, targetW, targetH);
+
+        resolve(canvas.toDataURL('image/jpeg', 0.82));
+      } catch (err) {
+        reject(err);
+      }
+    };
+    img.onerror = reject;
+
+    // Same-origin proxy keeps canvas readable when available. Without the proxy,
+    // this may fail and the CSS fallback above will remain in use.
+    img.src = palettePosterSrc(src);
+  });
+}
+
 // ── Filters ────────────────────────────────────────────────────────────────
 function buildFilters() {
   const countryCounts = {};
@@ -271,16 +329,19 @@ function openModal(idx) {
   const genres  = getGenres(item);
 
   document.getElementById('modalHeader').innerHTML = `
+    <div class="modal-header-bg" id="modalHeaderBg" data-src="${item.poster || ''}"></div>
+    <div class="modal-header-tint"></div>
     <button class="modal-close" id="modalCloseBtn">&#10005;</button>
     ${item.poster
       ? `<img class="modal-header-img" src="${item.poster}" alt="${item.title}" onerror="this.style.display='none'">`
       : `<div class="modal-header-placeholder">&#127916;</div>`}
-    <div class="modal-header-gradient"></div>
-    <div class="modal-header-title">${item.title}</div>
+    <div class="modal-header-copy">
+      <div class="modal-header-title">${item.title}</div>
+      <div class="modal-views">&#128065; ${views} 次觀看${country ? ' &nbsp;·&nbsp; ' + country : ''}</div>
+    </div>
   `;
 
   document.getElementById('modalBody').innerHTML = `
-    <div class="modal-views">&#128065; ${views} 次觀看${country ? ' &nbsp;·&nbsp; ' + country : ''}</div>
     <div class="modal-desc">${item.description || '無介紹'}</div>
     ${genres.length ? `
     <div class="modal-section">
@@ -296,6 +357,7 @@ function openModal(idx) {
   `;
 
   document.getElementById('modalCloseBtn').addEventListener('click', closeModal);
+  applyModalPosterBackground(item.poster);
   applyModalPosterPalette(item.poster);
   document.getElementById('modalOverlay').classList.add('open');
   document.body.style.overflow = 'hidden';
